@@ -375,7 +375,7 @@ function buildMqttCliMarkdown(operation, documentRoot, mqttConnection) {
   if (action === 'send') {
     if (responseTopic) {
       lines.push('# Subscribe for the response (-C 1 exits after the first message)');
-      lines.push(`mosquitto_sub ${hostArgs} -C 1 -t "${responseTopic}" &`);
+      lines.push(`mosquitto_sub ${hostArgs} -C 1 -F "%J" --pretty -t "${responseTopic}" &`);
       lines.push('');
     }
 
@@ -383,7 +383,7 @@ function buildMqttCliMarkdown(operation, documentRoot, mqttConnection) {
     lines.push(`mosquitto_pub ${hostArgs} -t "${requestTopic}" -m ${payloadArg}`);
   } else if (action === 'receive') {
     lines.push('# Subscribe (-C 1 exits after the first message)');
-    lines.push(`mosquitto_sub ${hostArgs} -C 1 -t "${requestTopic}" &`);
+    lines.push(`mosquitto_sub ${hostArgs} -C 1 -F "%J" --pretty -t "${requestTopic}" &`);
     lines.push('');
     lines.push('# Publish a sample message');
     lines.push(`mosquitto_pub ${hostArgs} -t "${requestTopic}" -m ${payloadArg}`);
