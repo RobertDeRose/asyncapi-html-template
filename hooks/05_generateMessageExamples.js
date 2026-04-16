@@ -165,15 +165,116 @@ function sampleFromSchema(schema, documentRoot, depth = 0, seenRefs = new Set())
 }
 
 // ---------------------------------------------------------------------------
+// allOf flattening - merge allOf sub-schemas into a single flat schema
+// ---------------------------------------------------------------------------
+
+function flattenAllOf(schema, documentRoot, depth = 0, seenRefs = new Set()) {
+  if (!schema || typeof schema !== 'object' || depth > 8) {
+    return schema;
+  }
+
+  // Resolve $ref first
+  if (schema.$ref && typeof schema.$ref === 'string' && schema.$ref.startsWith('#/')) {
+    if (seenRefs.has(schema.$ref)) return schema;
+    const nextSeen = new Set(seenRefs);
+    nextSeen.add(schema.$ref);
+    const resolved = resolveRef(documentRoot, schema.$ref);
+    if (resolved) {
+      return flattenAllOf(resolved, documentRoot, depth + 1, nextSeen);
+    }
+    return schema;
+  }
+
+  // Recursively flatten allOf
+  if (Array.isArray(schema.allOf) && schema.allOf.length > 0) {
+    const merged = {};
+    const mergedProperties = {};
+    const mergedRequired = [];
+
+    for (let sub of schema.allOf) {
+      sub = flattenAllOf(sub, documentRoot, depth + 1, seenRefs);
+      if (!sub || typeof sub !== 'object') continue;
+
+      for (const [key, value] of Object.entries(sub)) {
+        if (key === 'properties' && value && typeof value === 'object') {
+          for (const [propName, propSchema] of Object.entries(value)) {
+            // Later allOf entries override earlier ones (more specific wins)
+            mergedProperties[propName] = flattenAllOf(propSchema, documentRoot, depth + 1, seenRefs);
+          }
+        } else if (key === 'required' && Array.isArray(value)) {
+          mergedRequired.push(...value);
+        } else if (key === 'allOf') {
+          // skip nested allOf key itself (already processed)
+        } else {
+          merged[key] = value;
+        }
+      }
+    }
+
+    // Preserve non-allOf keys from the original schema
+    for (const [key, value] of Object.entries(schema)) {
+      if (key === 'allOf') continue;
+      if (key === 'properties' && value && typeof value === 'object') {
+        for (const [propName, propSchema] of Object.entries(value)) {
+          if (!(propName in mergedProperties)) {
+            mergedProperties[propName] = flattenAllOf(propSchema, documentRoot, depth + 1, seenRefs);
+          }
+        }
+      } else if (key === 'required' && Array.isArray(value)) {
+        mergedRequired.push(...value);
+      } else if (!(key in merged)) {
+        merged[key] = value;
+      }
+    }
+
+    if (Object.keys(mergedProperties).length > 0) {
+      merged.properties = mergedProperties;
+    }
+    if (mergedRequired.length > 0) {
+      merged.required = [...new Set(mergedRequired)];
+    }
+    if (!merged.type && merged.properties) {
+      merged.type = 'object';
+    }
+
+    return merged;
+  }
+
+  // Recurse into oneOf / anyOf
+  for (const keyword of ['oneOf', 'anyOf']) {
+    if (Array.isArray(schema[keyword])) {
+      schema[keyword] = schema[keyword].map(
+        sub => flattenAllOf(sub, documentRoot, depth + 1, seenRefs)
+      );
+    }
+  }
+
+  // Recurse into properties
+  if (schema.properties && typeof schema.properties === 'object') {
+    for (const [propName, propSchema] of Object.entries(schema.properties)) {
+      schema.properties[propName] = flattenAllOf(propSchema, documentRoot, depth + 1, seenRefs);
+    }
+  }
+
+  // Recurse into items
+  if (schema.items && typeof schema.items === 'object') {
+    schema.items = flattenAllOf(schema.items, documentRoot, depth + 1, seenRefs);
+  }
+
+  return schema;
+}
+
+// ---------------------------------------------------------------------------
 // Hook entry point
 // ---------------------------------------------------------------------------
 
 /**
- * Walks every message in the AsyncAPI document and, for messages that lack
- * explicit `examples`, generates a synthetic example payload by sampling the
- * message's payload schema.  This runs as `generate:before` so the React
- * component (which renders the "Example Payload" block) finds ready-made
- * examples and does not have to rely on its own (incomplete) allOf handling.
+ * Walks every message in the AsyncAPI document and:
+ * 1. Flattens allOf/oneOf/anyOf in the payload schema so the React component
+ *    sees a simple merged schema (works around the React component's broken
+ *    allOf example generation and type display).
+ * 2. Generates a synthetic example payload by sampling the (now flat) schema
+ *    for messages that lack explicit examples.
  *
  * Enabled via the `generateExamples` template parameter (default: false).
  */
@@ -202,12 +303,16 @@ module.exports = {
         continue;
       }
 
-      // Skip messages that already have explicit examples
-      if (Array.isArray(message.examples) && message.examples.length > 0) {
+      if (!message.payload) {
         continue;
       }
 
-      if (!message.payload) {
+      // Flatten allOf in the payload schema in-place so the React
+      // component renders merged properties and correct types.
+      message.payload = flattenAllOf(message.payload, documentRoot);
+
+      // Skip example generation for messages that already have explicit examples
+      if (Array.isArray(message.examples) && message.examples.length > 0) {
         continue;
       }
 
@@ -215,8 +320,7 @@ module.exports = {
       if (sample !== null && sample !== undefined) {
         message.examples = [{ payload: sample }];
         // Also set schema-level example so the React component's
-        // auto-generated "Example Payload" block uses it instead of
-        // its own broken allOf sampling.
+        // "Example" block picks it up directly.
         if (!Object.prototype.hasOwnProperty.call(message.payload, 'example')) {
           message.payload.example = sample;
         }
