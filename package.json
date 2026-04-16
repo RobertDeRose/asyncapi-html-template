@@ -120,6 +120,11 @@
         "description": "Generate example payloads for messages that lack explicit examples by sampling the payload schema. Handles allOf, oneOf, anyOf, and $ref resolution.",
         "required": false,
         "default": "false"
+      },
+      "mqttCliExamples": {
+        "description": "Generate mosquitto_pub/sub usage examples appended to the operation description.",
+        "required": false,
+        "default": "false"
       }
     },
     "nonRenderableFiles": [
