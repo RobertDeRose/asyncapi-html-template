@@ -49,6 +49,53 @@ export function Index({ asyncapi, params = {} }) {
       ${asyncapiScript}
   
       ${appJs}
+
+      <script>
+      // Add copy-to-clipboard buttons to all code blocks
+      (function() {
+        function addCopyButtons() {
+          document.querySelectorAll('pre').forEach(function(pre) {
+            if (pre.querySelector('.copy-btn')) return;
+            var btn = document.createElement('button');
+            btn.className = 'copy-btn';
+            btn.textContent = '\u2398';
+            btn.title = 'Copy to clipboard';
+            btn.setAttribute('aria-label', 'Copy to clipboard');
+            btn.style.cssText = 'position:absolute;top:6px;right:6px;background:rgba(255,255,255,0.15);color:#ccc;border:1px solid rgba(255,255,255,0.2);border-radius:4px;padding:2px 7px;cursor:pointer;font-size:14px;line-height:1.2;opacity:0;transition:opacity 0.15s';
+            pre.style.position = 'relative';
+            pre.addEventListener('mouseenter', function() { btn.style.opacity = '1'; });
+            pre.addEventListener('mouseleave', function() { btn.style.opacity = '0'; });
+            btn.addEventListener('mouseenter', function() { btn.style.opacity = '1'; });
+            btn.addEventListener('focus', function() { btn.style.opacity = '1'; });
+            btn.addEventListener('blur', function() { btn.style.opacity = '0'; });
+            btn.addEventListener('click', function() {
+              var code = pre.querySelector('code');
+              var text = (code || pre).textContent;
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function() {
+                  btn.textContent = '\u2713';
+                  btn.style.color = '#68d391';
+                  setTimeout(function() { btn.textContent = '\u2398'; btn.style.color = '#ccc'; }, 1500);
+                }).catch(function() {
+                  btn.textContent = '\u2717';
+                  btn.style.color = '#fc8181';
+                  setTimeout(function() { btn.textContent = '\u2398'; btn.style.color = '#ccc'; }, 1500);
+                });
+              }
+            });
+            pre.appendChild(btn);
+          });
+        }
+        // Run after hydration and on DOM mutations (React re-renders)
+        var observer = new MutationObserver(function() { addCopyButtons(); });
+        observer.observe(document.getElementById('root'), { childList: true, subtree: true });
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', addCopyButtons);
+        } else {
+          addCopyButtons();
+        }
+      })();
+      </script>
     </body>
   </html>`
   );

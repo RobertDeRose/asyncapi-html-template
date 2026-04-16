@@ -1,14 +1,21 @@
-const puppeteer = require('puppeteer');
 const path = require('path');
 
 /**
- * Generates PDF if user pass `pdf` paramater.
+ * Generates PDF if user pass `pdf` parameter.
  */
 module.exports = {
   'generate:after': async ({ templateParams = {}, targetDir }) => {
-    // all actions of this hook depend on parameters passed by the user, 
+    // all actions of this hook depend on parameters passed by the user,
     // if non are provided we should just stop the hook
     if (templateParams.pdf !== 'true') {
+      return;
+    }
+
+    let puppeteer;
+    try {
+      puppeteer = require('puppeteer');
+    } catch (err) {
+      console.warn('Skipping PDF generation because puppeteer is not installed.');
       return;
     }
 
@@ -20,18 +27,18 @@ module.exports = {
       const fileUrl = `file:///${fullPath.replaceAll('\\', '/')}`;
       // Go to prepared page with documentation
       await page.goto(fileUrl, { waitUntil: 'networkidle0' });
-  
+
       // Hide burger-menu in pdf
       await page.evaluate(() => { document.querySelector('.burger-menu').style.display = 'none'; });
 
-      // React uses its own events system with SyntheticEvents (prevents browser incompatabilities and gives React more control of events),
+      // React uses its own events system with SyntheticEvents (prevents browser incompatibilities and gives React more control of events),
       // so we must use `{ bubbles: true }`
       await page.$$eval('button > svg', chevrons => chevrons.forEach(chevron => {
         const button = chevron.parentElement;
         const toClick = chevron && chevron.classList && !Array.from(chevron.classList).some(cl => cl.includes('-rotate-180'));
         toClick && typeof button.dispatchEvent === 'function' && button.dispatchEvent(new Event('click', { bubbles: true }));
       }));
-    
+
       await page.pdf({ format: 'A4', path: `${targetDir}/index.pdf`, printBackground: true, timeout: parseInt(templateParams.pdfTimeout, 10) });
       browser.close();
     } catch(e) {
@@ -39,5 +46,5 @@ module.exports = {
       return;
     }
     console.info("PDF generated!");
-  }  
+  }
 };
