@@ -115,6 +115,11 @@
         "description": "Stringified JSON or a path to a JSON file to override the default React component config. The config override is merged with the default config using the [JSON Merge Patch](https://tools.ietf.org/html/rfc7386) algorithm.",
         "default": "",
         "required": false
+      },
+      "generateExamples": {
+        "description": "Generate example payloads for messages that lack explicit examples by sampling the payload schema. Handles allOf, oneOf, anyOf, and $ref resolution.",
+        "required": false,
+        "default": "false"
       }
     },
     "nonRenderableFiles": [
