@@ -135,6 +135,41 @@ export function includeFile(pathFile) {
 export function stringifySpec(asyncapi) {
   const stringifiedDoc = stringify(asyncapi);
   if(stringifiedDoc === undefined) throw new Error("Unable to stringify parsed AsyncAPI document passed by the generator. Please report an issue in https://github.com/asyncapi/html-template repository.")
+
+  // The parser's stringify() serializes from the parsed model, which does not
+  // preserve properties injected onto _json by hooks (e.g. message.examples,
+  // payload.example).  Re-inject them so client-side hydration sees them too.
+  const sourceMessages = asyncapi?._json?.components?.messages;
+  if (sourceMessages && typeof sourceMessages === 'object') {
+    try {
+      const doc = JSON.parse(stringifiedDoc);
+      const targetMessages = doc?.components?.messages;
+      if (targetMessages && typeof targetMessages === 'object') {
+        let patched = false;
+        for (const [name, srcMsg] of Object.entries(sourceMessages)) {
+          if (!srcMsg || !targetMessages[name]) continue;
+
+          if (Array.isArray(srcMsg.examples) && srcMsg.examples.length > 0) {
+            targetMessages[name].examples = srcMsg.examples;
+            patched = true;
+          }
+
+          if (srcMsg.payload && Object.prototype.hasOwnProperty.call(srcMsg.payload, 'example')) {
+            if (targetMessages[name].payload) {
+              targetMessages[name].payload.example = srcMsg.payload.example;
+              patched = true;
+            }
+          }
+        }
+        if (patched) {
+          return JSON.stringify(doc);
+        }
+      }
+    } catch (_) {
+      // Fall through to return original stringified doc
+    }
+  }
+
   return stringifiedDoc
 }
 
